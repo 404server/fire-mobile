@@ -5,11 +5,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.ui.Modifier
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import kz.itspace.fire.ui.CallScreen
 import kz.itspace.fire.ui.DispatchScreen
+import kz.itspace.fire.ui.NewCallScreen
 import kz.itspace.fire.ui.theme.FireTheme
 
 class MainActivity : ComponentActivity() {
@@ -21,8 +24,27 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             FireTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    DispatchScreen(vm, Modifier.padding(innerPadding))
+                val nav = rememberNavController()
+                NavHost(nav, startDestination = "calls") {
+                    composable("calls") {
+                        DispatchScreen(
+                            vm = vm,
+                            onOpenCall = { id -> nav.navigate("call/$id") },
+                            onNewCall = { nav.navigate("new") },
+                        )
+                    }
+                    composable("call/{id}", arguments = listOf(navArgument("id") { type = NavType.IntType })) { entry ->
+                        CallScreen(vm, id = entry.arguments!!.getInt("id"), onBack = { nav.navigateUp() })
+                    }
+                    composable("new") {
+                        NewCallScreen(
+                            onSave = { address, incident, phone, note ->
+                                val id = vm.addAlarm(address, incident, phone, note)
+                                nav.navigate("call/$id") { popUpTo("calls") }
+                            },
+                            onBack = { nav.navigateUp() },
+                        )
+                    }
                 }
             }
         }

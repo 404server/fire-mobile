@@ -1,6 +1,7 @@
 package kz.itspace.fire.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,27 +11,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kz.itspace.fire.R
 import kz.itspace.fire.model.Alarm
 import kz.itspace.fire.model.CallStatus
 import kz.itspace.fire.model.Incident
-import kz.itspace.fire.model.Vehicle
+import kz.itspace.fire.model.formatElapsed
 
 @Composable
 fun IncidentIcon(incident: Incident) {
@@ -45,66 +44,52 @@ fun IncidentIcon(incident: Incident) {
 }
 
 @Composable
-fun AlarmCard(alarm: Alarm, onAssign: () -> Unit, onFinish: () -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
+fun CallStatus.color(): Color = when (this) {
+    CallStatus.NEW -> MaterialTheme.colorScheme.error
+    CallStatus.EN_ROUTE -> MaterialTheme.colorScheme.secondary
+    CallStatus.ON_SITE -> MaterialTheme.colorScheme.tertiary
+    CallStatus.DONE -> MaterialTheme.colorScheme.outline
+}
 
-    Card(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IncidentIcon(alarm.incident)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("#${alarm.id} ${alarm.incident.title}", fontWeight = FontWeight.Bold)
-                    Text(alarm.address)
-                }
-                Text(alarm.status.label, color = MaterialTheme.colorScheme.primary)
+@Composable
+fun Pill(text: String, color: Color) {
+    Surface(color = color.copy(alpha = 0.15f), contentColor = color, shape = CircleShape) {
+        Text(text, Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+@Composable
+fun AlarmCard(alarm: Alarm, now: Long, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            IncidentIcon(alarm.incident)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("#${alarm.id} ${alarm.incident.title} · ${alarm.incident.details()}", fontWeight = FontWeight.Bold)
+                Text(alarm.address)
+                alarm.unit?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            if (expanded) {
-                Text("Детали: ${alarm.incident.details()}")
-                Text("Бригада: ${alarm.unit ?: "не назначена"}")
-            }
-            when (alarm.status) {
-                CallStatus.NEW -> Button(onClick = onAssign, modifier = Modifier.fillMaxWidth()) {
-                    Text("Назначить бригаду")
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Pill(alarm.status.label, alarm.status.color())
+                if (alarm.status != CallStatus.DONE) {
+                    Text(formatElapsed(now - alarm.createdAt), style = MaterialTheme.typography.titleMedium)
                 }
-                CallStatus.ASSIGNED -> Button(onClick = onFinish, modifier = Modifier.fillMaxWidth()) {
-                    Text("Завершить")
-                }
-                CallStatus.DONE -> {}
             }
         }
     }
 }
 
 @Composable
-fun UnitRow(unit: Vehicle, busy: Boolean) {
-    Row(Modifier.fillMaxWidth()) {
-        Text("${unit.emoji} ${unit.callSign}", Modifier.weight(1f))
-        Text(
-            text = if (busy) "занята" else "свободна",
-            color = if (busy) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
-        )
+fun InfoLine(label: String, value: String) {
+    Row {
+        Text(label, Modifier.width(110.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value)
     }
 }
 
 @Composable
-fun CounterDemoCard(viewModelCounter: Int, onIncrement: () -> Unit) {
-    var rememberCounter by remember { mutableIntStateOf(0) }
-    var saveableCounter by rememberSaveable { mutableIntStateOf(0) }
-
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text("Нажмите и поверните экран", fontWeight = FontWeight.Bold)
-            Text("remember: $rememberCounter")
-            Text("rememberSaveable: $saveableCounter")
-            Text("ViewModel: $viewModelCounter")
-            OutlinedButton(onClick = {
-                rememberCounter++
-                saveableCounter++
-                onIncrement()
-            }) {
-                Text("+1 всем трём")
-            }
-        }
+fun BackButton(onBack: () -> Unit) {
+    IconButton(onClick = onBack) {
+        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = "Назад")
     }
 }

@@ -1,29 +1,29 @@
 package kz.itspace.fire.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -31,109 +31,74 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kz.itspace.fire.DispatchViewModel
 import kz.itspace.fire.R
-import kz.itspace.fire.model.EntityRandomizer
-import kz.itspace.fire.model.Incident
+import kz.itspace.fire.model.CallStatus
+import kz.itspace.fire.model.busyUnits
+import kz.itspace.fire.model.queue
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DispatchScreen(vm: DispatchViewModel, modifier: Modifier = Modifier) {
+fun DispatchScreen(vm: DispatchViewModel, onOpenCall: (Int) -> Unit, onNewCall: () -> Unit) {
+    val alarms by vm.alarms.collectAsStateWithLifecycle()
+    val now by vm.now.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
-    var hideDone by rememberSaveable { mutableStateOf(false) }
+    var showDone by rememberSaveable { mutableStateOf(false) }
 
-    val visibleAlarms = vm.filteredAlarms(query, hideDone)
+    val visible = remember(alarms, query, showDone) { alarms.queue(query, showDone) }
+    val busy = remember(alarms) { alarms.busyUnits() }
+    val waiting = alarms.count { it.status == CallStatus.NEW }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(painterResource(R.drawable.ic_fire), contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Column {
-                    Text("Диспетчерская 112", style = MaterialTheme.typography.headlineSmall)
-                    Text(vm.message)
-                }
-            }
-        }
-        item {
-            CounterDemoCard(vm.counter, onIncrement = { vm.increment() })
-        }
-        item {
-            NewAlarmForm(onAdd = { address, incident -> vm.addAlarm(address, incident) })
-        }
-        item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("Бригады", fontWeight = FontWeight.Bold)
-                    vm.units.forEach { unit -> UnitRow(unit, vm.isBusy(unit)) }
-                }
-            }
-        }
-        item {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text("Поиск по адресу или типу") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Диспетчерская 112") },
+                navigationIcon = { Image(painterResource(R.drawable.ic_fire), null, Modifier.padding(horizontal = 8.dp)) },
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = hideDone, onCheckedChange = { hideDone = it })
-                Text("Скрыть завершённые")
-            }
-        }
-        items(visibleAlarms, key = { it.id }) { alarm ->
-            AlarmCard(
-                alarm = alarm,
-                onAssign = { vm.assign(alarm) },
-                onFinish = { vm.finish(alarm) },
-            )
-        }
-    }
-}
-
-@Composable
-fun NewAlarmForm(onAdd: (String, Incident) -> Unit) {
-    var address by rememberSaveable { mutableStateOf("") }
-    var type by rememberSaveable { mutableIntStateOf(0) }
-    val types = listOf("🔥 Пожар", "🚗 ДТП", "🚑 Медицина")
-
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text("Новый вызов", fontWeight = FontWeight.Bold)
-            OutlinedTextField(
-                value = address,
-                onValueChange = { address = it },
-                label = { Text("Адрес") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                types.forEachIndexed { index, label ->
-                    FilterChip(selected = type == index, onClick = { type = index }, label = { Text(label) })
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    enabled = address.isNotBlank(),
-                    onClick = {
-                        val incident = when (type) {
-                            0 -> Incident.Fire(floor = 1)
-                            1 -> Incident.Accident(injured = 1)
-                            else -> Incident.Medical(critical = false)
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(onClick = onNewCall) { Text("+ Новый вызов") }
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 88.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Ожидают бригаду: $waiting · Свободно бригад: ${vm.units.size - busy.size} из ${vm.units.size}",
+                        fontWeight = FontWeight.Bold,
+                        color = if (waiting > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    )
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        vm.units.forEach { unit ->
+                            val free = unit.callSign !in busy
+                            Pill(
+                                "${unit.emoji} ${unit.callSign}",
+                                if (free) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outline,
+                            )
                         }
-                        onAdd(address, incident)
-                        address = ""
-                    },
-                ) {
-                    Text("Добавить")
+                    }
                 }
-                OutlinedButton(onClick = { onAdd(EntityRandomizer.randomAddress(), EntityRandomizer.randomIncident()) }) {
-                    Text("Случайный")
-                }
+            }
+            item {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("Поиск по адресу или типу") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                FilterChip(selected = showDone, onClick = { showDone = !showDone }, label = { Text("Показать завершённые") })
+            }
+            if (visible.isEmpty()) {
+                item { Text("Вызовов нет", Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            items(visible, key = { it.id }) { alarm ->
+                AlarmCard(alarm, now, onClick = { onOpenCall(alarm.id) })
             }
         }
     }
